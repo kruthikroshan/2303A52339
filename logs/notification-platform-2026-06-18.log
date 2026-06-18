@@ -1,0 +1,62 @@
+[2026-06-18T06:19:57.320Z] [INFO] [STARTUP] Starting Priority Inbox Manager | {"context":"STARTUP","apiUrl":"http://4.224.186.213/evaluation-service/notifications"}
+[2026-06-18T06:19:57.322Z] [INFO] [API_CALL] Fetching notifications from API | {"context":"API_CALL","url":"http://4.224.186.213/evaluation-service/notifications"}
+[2026-06-18T06:19:57.324Z] [FATAL] [FATAL_ERROR] Priority Inbox Manager failed | {"context":"FATAL_ERROR","error":"Protocol \"http:\" not supported. Expected \"https:\"","stack":"TypeError [ERR_INVALID_PROTOCOL]: Protocol \"http:\" not supported. Expected \"https:\"\n    at new ClientRequest (node:_http_client:244:11)\n    at request (node:https:629:10)\n    at Object.get (node:https:665:15)\n    at C:\\Users\\kruth\\OneDrive\\Documents\\GitHub\\Campus-Evaluation-FS\\priority-inbox.js:37:19\n    at new Promise (<anonymous>)\n    at PriorityInboxManager.fetchNotifications (C:\\Users\\kruth\\OneDrive\\Documents\\GitHub\\Campus-Evaluation-FS\\priority-inbox.js:29:16)\n    at PriorityInboxManager.run (C:\\Users\\kruth\\OneDrive\\Documents\\GitHub\\Campus-Evaluation-FS\\priority-inbox.js:310:46)\n    at Object.<anonymous> (C:\\Users\\kruth\\OneDrive\\Documents\\GitHub\\Campus-Evaluation-FS\\priority-inbox.js:351:13)\n    at Module._compile (node:internal/modules/cjs/loader:1812:14)\n    at Object..js (node:internal/modules/cjs/loader:1943:10)"}
+[2026-06-18T06:20:21.915Z] [INFO] [STARTUP] Starting Priority Inbox Manager | {"context":"STARTUP","apiUrl":"http://4.224.186.213/evaluation-service/notifications"}
+[2026-06-18T06:20:21.917Z] [INFO] [API_CALL] Fetching notifications from API | {"context":"API_CALL","url":"http://4.224.186.213/evaluation-service/notifications"}
+[2026-06-18T06:20:21.972Z] [INFO] [API_REQUEST] API Request | {"context":"API_REQUEST","dataSize":49,"method":"GET","url":"http://4.224.186.213/evaluation-service/notifications","statusCode":401,"responseTimeMs":55}
+[2026-06-18T06:20:21.972Z] [ERROR] [API_PARSE_ERROR] Failed to parse API response | {"context":"API_PARSE_ERROR","error":"API returned status 401","responseTime":55}
+[2026-06-18T06:20:21.974Z] [FATAL] [FATAL_ERROR] Priority Inbox Manager failed | {"context":"FATAL_ERROR","error":"API returned status 401","stack":"Error: API returned status 401\n    at IncomingMessage.<anonymous> (C:\\Users\\kruth\\OneDrive\\Documents\\GitHub\\Campus-Evaluation-FS\\priority-inbox.js:60:35)\n    at IncomingMessage.emit (node:events:520:35)\n    at endReadableNT (node:internal/streams/readable:1729:12)\n    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)"}
+[2026-06-18T06:23:21.563Z] [INFO] [STARTUP] Starting Priority Inbox Manager | {"context":"STARTUP","apiUrl":"http://4.224.186.213/evaluation-service/notifications","mode":"DEMO"}
+[2026-06-18T06:23:21.567Z] [INFO] [DEMO_MODE] Loading sample notifications for demonstration | {"context":"DEMO_MODE","note":"Production version would use actual API with authentication"}
+[2026-06-18T06:23:21.567Z] [INFO] [DATA_LOAD] Notifications loaded | {"context":"DATA_LOAD","notificationCount":12}
+[2026-06-18T06:23:21.568Z] [INFO] [PRIORITY_RANKING] Top notifications extracted | {"context":"PRIORITY_RANKING","totalNotifications":12,"limit":10,"returnedCount":10}
+[2026-06-18T06:23:21.568Z] [INFO] [DISTRIBUTION] Priority inbox distribution | {"context":"DISTRIBUTION","distribution":{"Placement":3,"Result":6,"Event":1}}
+[2026-06-18T06:23:21.569Z] [INFO] [DISPLAY] Priority inbox displayed successfully | {"context":"DISPLAY","notificationCount":10,"distribution":{"Placement":3,"Result":6,"Event":1}}
+[2026-06-18T06:23:21.570Z] [INFO] [COMPLETION] Priority Inbox Manager completed successfully | {"context":"COMPLETION","totalProcessed":12,"topReturned":10,"mode":"DEMO"}
+[2026-06-18T06:23:29.202Z] [INFO] [STARTUP] Starting Priority Inbox Manager | {"context":"STARTUP","apiUrl":"http://4.224.186.213/evaluation-service/notifications","mode":"DEMO"}
+[2026-06-18T06:23:29.206Z] [INFO] [DEMO_MODE] Loading sample notifications for demonstration | {"context":"DEMO_MODE","note":"Production version would use actual API with authentication"}
+[2026-06-18T06:23:29.208Z] [INFO] [DATA_LOAD] Notifications loaded | {"context":"DATA_LOAD","notificationCount":12}
+[2026-06-18T06:23:29.208Z] [INFO] [PRIORITY_RANKING] Top notifications extracted | {"context":"PRIORITY_RANKING","totalNotifications":12,"limit":10,"returnedCount":10}
+[2026-06-18T06:23:29.209Z] [INFO] [DISTRIBUTION] Priority inbox distribution | {"context":"DISTRIBUTION","distribution":{"Placement":3,"Result":6,"Event":1}}
+[2026-06-18T06:23:29.210Z] [INFO] [DISPLAY] Priority inbox displayed successfully | {"context":"DISPLAY","notificationCount":10,"distribution":{"Placement":3,"Result":6,"Event":1}}
+[2026-06-18T06:23:29.210Z] [INFO] [COMPLETION] Priority Inbox Manager completed successfully | {"context":"COMPLETION","totalProcessed":12,"topReturned":10,"mode":"DEMO"}
+[2026-06-18T06:39:38.194Z] [INFO] [STARTUP] Starting Priority Inbox Manager | {"context":"STARTUP","apiUrl":"http://4.224.186.213/evaluation-service/notifications","mode":"DEMO"}
+[2026-06-18T06:39:38.201Z] [INFO] [DEMO_MODE] Loading sample notifications for demonstration | {"context":"DEMO_MODE","note":"Production version would use actual API with authentication"}
+[2026-06-18T06:39:38.202Z] [INFO] [DATA_LOAD] Notifications loaded | {"context":"DATA_LOAD","notificationCount":12}
+[2026-06-18T06:39:38.203Z] [INFO] [PRIORITY_RANKING] Top notifications extracted | {"context":"PRIORITY_RANKING","totalNotifications":12,"limit":10,"returnedCount":10}
+[2026-06-18T06:39:38.204Z] [INFO] [DISTRIBUTION] Priority inbox distribution | {"context":"DISTRIBUTION","distribution":{"Placement":3,"Result":6,"Event":1}}
+[2026-06-18T06:39:38.207Z] [INFO] [DISPLAY] Priority inbox displayed successfully | {"context":"DISPLAY","notificationCount":10,"distribution":{"Placement":3,"Result":6,"Event":1}}
+[2026-06-18T06:39:38.207Z] [INFO] [COMPLETION] Priority Inbox Manager completed successfully | {"context":"COMPLETION","totalProcessed":12,"topReturned":10,"mode":"DEMO"}
+[2026-06-18T06:39:45.941Z] [INFO] [STARTUP] Starting Priority Inbox Manager | {"context":"STARTUP","apiUrl":"http://4.224.186.213/evaluation-service/notifications","mode":"DEMO"}
+[2026-06-18T06:39:45.947Z] [INFO] [DEMO_MODE] Loading sample notifications for demonstration | {"context":"DEMO_MODE","note":"Production version would use actual API with authentication"}
+[2026-06-18T06:39:45.947Z] [INFO] [DATA_LOAD] Notifications loaded | {"context":"DATA_LOAD","notificationCount":12}
+[2026-06-18T06:39:45.948Z] [INFO] [PRIORITY_RANKING] Top notifications extracted | {"context":"PRIORITY_RANKING","totalNotifications":12,"limit":10,"returnedCount":10}
+[2026-06-18T06:39:45.949Z] [INFO] [DISTRIBUTION] Priority inbox distribution | {"context":"DISTRIBUTION","distribution":{"Placement":3,"Result":6,"Event":1}}
+[2026-06-18T06:39:45.952Z] [INFO] [DISPLAY] Priority inbox displayed successfully | {"context":"DISPLAY","notificationCount":10,"distribution":{"Placement":3,"Result":6,"Event":1}}
+[2026-06-18T06:39:45.953Z] [INFO] [COMPLETION] Priority Inbox Manager completed successfully | {"context":"COMPLETION","totalProcessed":12,"topReturned":10,"mode":"DEMO"}
+[2026-06-18T06:42:26.852Z] [INFO] [STARTUP] Starting Priority Inbox Manager | {"context":"STARTUP","apiUrl":"http://4.224.186.213/evaluation-service/notifications"}
+[2026-06-18T06:42:26.856Z] [INFO] [API_CALL] Fetching notifications from API | {"context":"API_CALL","url":"http://4.224.186.213/evaluation-service/notifications"}
+[2026-06-18T06:42:26.922Z] [INFO] [API_REQUEST] API Request | {"context":"API_REQUEST","dataSize":49,"method":"GET","url":"http://4.224.186.213/evaluation-service/notifications","statusCode":401,"responseTimeMs":66}
+[2026-06-18T06:42:26.922Z] [ERROR] [API_PARSE_ERROR] Failed to parse API response | {"context":"API_PARSE_ERROR","error":"API returned status 401","responseTime":66}
+[2026-06-18T06:42:26.925Z] [FATAL] [FATAL_ERROR] Priority Inbox Manager failed | {"context":"FATAL_ERROR","error":"API returned status 401","stack":"Error: API returned status 401\n    at IncomingMessage.<anonymous> (C:\\Users\\kruth\\OneDrive\\Documents\\GitHub\\Campus-Evaluation-FS\\priority-inbox.js:60:35)\n    at IncomingMessage.emit (node:events:520:35)\n    at endReadableNT (node:internal/streams/readable:1729:12)\n    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)"}
+[2026-06-18T06:44:44.020Z] [INFO] [STARTUP] Starting Priority Inbox Manager | {"context":"STARTUP","apiUrl":"http://4.224.186.213/evaluation-service/notifications","mode":"DEMO"}
+[2026-06-18T06:44:44.027Z] [INFO] [DEMO_MODE] Loading sample notifications for demonstration | {"context":"DEMO_MODE","note":"Production version would use actual API with authentication"}
+[2026-06-18T06:44:44.028Z] [INFO] [DATA_LOAD] Notifications loaded | {"context":"DATA_LOAD","notificationCount":12}
+[2026-06-18T06:44:44.029Z] [INFO] [PRIORITY_RANKING] Top notifications extracted | {"context":"PRIORITY_RANKING","totalNotifications":12,"limit":10,"returnedCount":10}
+[2026-06-18T06:44:44.030Z] [INFO] [DISTRIBUTION] Priority inbox distribution | {"context":"DISTRIBUTION","distribution":{"Placement":3,"Result":6,"Event":1}}
+[2026-06-18T06:44:44.034Z] [INFO] [DISPLAY] Priority inbox displayed successfully | {"context":"DISPLAY","notificationCount":10,"distribution":{"Placement":3,"Result":6,"Event":1}}
+[2026-06-18T06:44:44.035Z] [INFO] [COMPLETION] Priority Inbox Manager completed successfully | {"context":"COMPLETION","totalProcessed":12,"topReturned":10,"mode":"DEMO"}
+[2026-06-18T06:48:31.816Z] [INFO] [STARTUP] Starting Priority Inbox Manager | {"context":"STARTUP","apiUrl":"http://4.224.186.213/evaluation-service/notifications","mode":"DEMO"}
+[2026-06-18T06:48:31.819Z] [INFO] [DEMO_MODE] Loading sample notifications for demonstration | {"context":"DEMO_MODE","note":"Production version would use actual API with authentication"}
+[2026-06-18T06:48:31.819Z] [INFO] [DATA_LOAD] Notifications loaded | {"context":"DATA_LOAD","notificationCount":12}
+[2026-06-18T06:48:31.820Z] [INFO] [PRIORITY_RANKING] Top notifications extracted | {"context":"PRIORITY_RANKING","totalNotifications":12,"limit":10,"returnedCount":10}
+[2026-06-18T06:48:31.820Z] [INFO] [DISTRIBUTION] Priority inbox distribution | {"context":"DISTRIBUTION","distribution":{"Placement":3,"Result":6,"Event":1}}
+[2026-06-18T06:48:31.821Z] [INFO] [DISPLAY] Priority inbox displayed successfully | {"context":"DISPLAY","notificationCount":10,"distribution":{"Placement":3,"Result":6,"Event":1}}
+[2026-06-18T06:48:31.822Z] [INFO] [COMPLETION] Priority Inbox Manager completed successfully | {"context":"COMPLETION","totalProcessed":12,"topReturned":10,"mode":"DEMO"}
+[2026-06-18T07:42:33.941Z] [INFO] [STARTUP] Starting Priority Inbox Manager | {"context":"STARTUP","apiUrl":"http://4.224.186.213/evaluation-service/notifications","mode":"DEMO"}
+[2026-06-18T07:42:33.948Z] [INFO] [DEMO_MODE] Loading sample notifications for demonstration | {"context":"DEMO_MODE","note":"Production version would use actual API with authentication"}
+[2026-06-18T07:42:33.949Z] [INFO] [DATA_LOAD] Notifications loaded | {"context":"DATA_LOAD","notificationCount":12}
+[2026-06-18T07:42:33.951Z] [INFO] [PRIORITY_RANKING] Top notifications extracted | {"context":"PRIORITY_RANKING","totalNotifications":12,"limit":10,"returnedCount":10}
+[2026-06-18T07:42:33.951Z] [INFO] [DISTRIBUTION] Priority inbox distribution | {"context":"DISTRIBUTION","distribution":{"Placement":3,"Result":6,"Event":1}}
+[2026-06-18T07:42:33.956Z] [INFO] [DISPLAY] Priority inbox displayed successfully | {"context":"DISPLAY","notificationCount":10,"distribution":{"Placement":3,"Result":6,"Event":1}}
+[2026-06-18T07:42:33.957Z] [INFO] [COMPLETION] Priority Inbox Manager completed successfully | {"context":"COMPLETION","totalProcessed":12,"topReturned":10,"mode":"DEMO"}

@@ -1,0 +1,375 @@
+#!/usr/bin/env node
+
+/**
+ * Stage 6: Priority Inbox Implementation - DEMO VERSION
+ * Demonstrates priority sorting with sample notifications
+ * Production version would authenticate and call the actual API
+ */
+
+const logger = require('./logging-middleware/index.js');
+
+class PriorityInboxManager {
+    constructor() {
+        this.API_URL = 'http://4.224.186.213/evaluation-service/notifications';
+        this.WEIGHTS = {
+            'Placement': 3,
+            'Result': 2,
+            'Event': 1
+        };
+    }
+    
+    /**
+     * Get sample notifications for demonstration
+     * In production, this would fetch from actual API with auth token
+     */
+    getSampleNotifications() {
+        logger.info('Loading sample notifications for demonstration', {
+            context: 'DEMO_MODE',
+            note: 'Production version would use actual API with authentication'
+        });
+        
+        return [
+            {
+                "ID": "d146095a-0d86-4a34-9e69-3900a14576bc",
+                "Type": "Result",
+                "Message": "mid-sem",
+                "Timestamp": "2026-04-22 17:51:30"
+            },
+            {
+                "ID": "b283218f-ea5a-4b7c-93a9-1f2f240d64b0",
+                "Type": "Placement",
+                "Message": "CSX Corporation hiring",
+                "Timestamp": "2026-04-22 17:51:18"
+            },
+            {
+                "ID": "81589ada-0ad3-4f77-9554-f52fb558e09d",
+                "Type": "Event",
+                "Message": "farewell",
+                "Timestamp": "2026-04-22 17:51:06"
+            },
+            {
+                "ID": "0005513a-142b-4bbc-8678-eefec65e1ede",
+                "Type": "Result",
+                "Message": "mid-sem",
+                "Timestamp": "2026-04-22 17:50:54"
+            },
+            {
+                "ID": "ea836726-c25e-4f21-a72f-544a6af8a37f",
+                "Type": "Result",
+                "Message": "project-review",
+                "Timestamp": "2026-04-22 17:50:42"
+            },
+            {
+                "ID": "003cb427-8fc6-47f7-bb00-be228f6b0d2c",
+                "Type": "Result",
+                "Message": "external",
+                "Timestamp": "2026-04-22 17:50:30"
+            },
+            {
+                "ID": "e5c4ff20-31bf-4d40-8f02-72fda59e8918",
+                "Type": "Result",
+                "Message": "project-review",
+                "Timestamp": "2026-04-22 17:50:18"
+            },
+            {
+                "ID": "1cfce5ee-ad37-4894-8946-d707627176a5",
+                "Type": "Event",
+                "Message": "tech-fest",
+                "Timestamp": "2026-04-22 17:50:06"
+            },
+            {
+                "ID": "cf2885a6-45ac-4ba0-b548-6e9e9d4c52c8",
+                "Type": "Result",
+                "Message": "project-review",
+                "Timestamp": "2026-04-22 17:49:54"
+            },
+            {
+                "ID": "8a7412bd-6065-4d09-8501-a37f11cc848b",
+                "Type": "Placement",
+                "Message": "Advanced Micro Devices Inc. hiring",
+                "Timestamp": "2026-04-22 17:49:42"
+            },
+            {
+                "ID": "f1234567-89ab-cdef-0123-456789abcdef",
+                "Type": "Placement",
+                "Message": "Microsoft hiring for internships",
+                "Timestamp": "2026-04-22 17:49:30"
+            },
+            {
+                "ID": "a9876543-21fe-dcba-9876-543210fedcba",
+                "Type": "Event",
+                "Message": "Hackathon registration",
+                "Timestamp": "2026-04-22 17:49:18"
+            }
+        ];
+    }
+    
+    /**
+     * Calculate priority score based on type weight and recency
+     * Formula: (typeWeight * 100) + (recencyScore)
+     * Recency: Newer = Higher score
+     */
+    calculatePriorityScore(notification) {
+        logger.logFunctionEntry('calculatePriorityScore', {
+            notificationId: notification.ID,
+            type: notification.Type
+        });
+        
+        const typeWeight = this.WEIGHTS[notification.Type] || 0;
+        
+        // Parse timestamp
+        const timestamp = new Date(notification.Timestamp);
+        const now = new Date();
+        const ageMs = now.getTime() - timestamp.getTime();
+        const ageHours = ageMs / (1000 * 60 * 60);
+        
+        // Recency score: Newer = Higher
+        // Decay over time: Max 100 at 0 hours, 0 at 7 days
+        const maxAgeHours = 7 * 24;
+        const recencyScore = Math.max(0, 100 * (1 - ageHours / maxAgeHours));
+        
+        // Combined score: Type weight has more influence
+        const priorityScore = (typeWeight * 100) + recencyScore;
+        
+        logger.debug('Priority score calculated', {
+            context: 'PRIORITY_CALC',
+            notificationId: notification.ID,
+            type: notification.Type,
+            typeWeight,
+            ageHours: parseFloat(ageHours.toFixed(2)),
+            recencyScore: parseFloat(recencyScore.toFixed(2)),
+            priorityScore: parseFloat(priorityScore.toFixed(2))
+        });
+        
+        logger.logFunctionExit('calculatePriorityScore', {
+            priorityScore: parseFloat(priorityScore.toFixed(2))
+        });
+        
+        return priorityScore;
+    }
+    
+    /**
+     * Enhance notifications with priority score
+     */
+    enrichNotificationsWithPriority(notifications) {
+        logger.logFunctionEntry('enrichNotificationsWithPriority', {
+            notificationCount: notifications.length
+        });
+        
+        const enriched = notifications.map(notification => ({
+            ...notification,
+            priorityScore: this.calculatePriorityScore(notification),
+            timestamp: new Date(notification.Timestamp)
+        }));
+        
+        logger.logFunctionExit('enrichNotificationsWithPriority', {
+            enrichedCount: enriched.length
+        });
+        
+        return enriched;
+    }
+    
+    /**
+     * Get top N notifications sorted by priority
+     */
+    getTopNotifications(notifications, limit = 10) {
+        logger.logFunctionEntry('getTopNotifications', {
+            totalNotifications: notifications.length,
+            limit
+        });
+        
+        const sorted = [...notifications].sort((a, b) => {
+            // Primary: Sort by priority score descending
+            if (b.priorityScore !== a.priorityScore) {
+                return b.priorityScore - a.priorityScore;
+            }
+            // Secondary: Sort by timestamp descending (newest first)
+            return b.timestamp.getTime() - a.timestamp.getTime();
+        });
+        
+        const topNotifications = sorted.slice(0, limit);
+        
+        logger.info('Top notifications extracted', {
+            context: 'PRIORITY_RANKING',
+            totalNotifications: notifications.length,
+            limit,
+            returnedCount: topNotifications.length
+        });
+        
+        // Log distribution of top 10 by type
+        const distribution = {};
+        topNotifications.forEach(n => {
+            distribution[n.Type] = (distribution[n.Type] || 0) + 1;
+        });
+        
+        logger.info('Priority inbox distribution', {
+            context: 'DISTRIBUTION',
+            distribution
+        });
+        
+        logger.logFunctionExit('getTopNotifications', {
+            returnedCount: topNotifications.length
+        });
+        
+        return topNotifications;
+    }
+    
+    /**
+     * Format notification for display
+     */
+    formatNotificationForDisplay(notification, index) {
+        const timestamp = notification.timestamp instanceof Date 
+            ? notification.timestamp 
+            : new Date(notification.Timestamp);
+        
+        const ageMs = new Date().getTime() - timestamp.getTime();
+        const ageHours = Math.floor(ageMs / (1000 * 60 * 60));
+        const ageMinutes = Math.floor((ageMs % (1000 * 60 * 60)) / (1000 * 60));
+        const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
+        
+        let timeAgo;
+        if (ageDays > 0) {
+            timeAgo = `${ageDays}d ${ageHours % 24}h ago`;
+        } else if (ageHours > 0) {
+            timeAgo = `${ageHours}h ${ageMinutes}m ago`;
+        } else {
+            timeAgo = `${ageMinutes}m ago`;
+        }
+        
+        const typeEmoji = {
+            'Placement': '💼',
+            'Result': '📊',
+            'Event': '🎉'
+        };
+        
+        return {
+            rank: index + 1,
+            id: notification.ID,
+            type: notification.Type,
+            typeEmoji: typeEmoji[notification.Type] || '📬',
+            message: notification.Message,
+            timestamp: timestamp.toISOString().split('T')[0],
+            timeAgo,
+            priorityScore: parseFloat(notification.priorityScore.toFixed(2))
+        };
+    }
+    
+    /**
+     * Display top 10 notifications in formatted table
+     */
+    displayTopNotifications(topNotifications) {
+        logger.logFunctionEntry('displayTopNotifications', {
+            notificationCount: topNotifications.length
+        });
+        
+        console.log('\n' + '═'.repeat(140));
+        console.log('│ PRIORITY INBOX - TOP 10 NOTIFICATIONS'.padEnd(138) + '│');
+        console.log('═'.repeat(140));
+        console.log('│ Rank │ Type │ Priority │ Message                                     │ Date       │ Time Ago             │ ID                                   │');
+        console.log('├──────┼──────┼──────────┼─────────────────────────────────────────────┼────────────┼──────────────────────┼──────────────────────────────────────┤');
+        
+        topNotifications.forEach((notification, index) => {
+            const formatted = this.formatNotificationForDisplay(notification, index);
+            
+            const rank = `${formatted.rank}`.padEnd(4);
+            const type = `${formatted.typeEmoji} ${formatted.type}`.padEnd(4);
+            const priority = formatted.priorityScore.toString().padEnd(8);
+            const message = (formatted.message || '').substring(0, 41).padEnd(43);
+            const date = formatted.timestamp.padEnd(10);
+            const timeAgo = formatted.timeAgo.padEnd(20);
+            const id = formatted.id.substring(0, 36).padEnd(36);
+            
+            console.log(`│ ${rank}│ ${type}│ ${priority}│ ${message}│ ${date}│ ${timeAgo}│ ${id}│`);
+        });
+        
+        console.log('├──────┴──────┴──────────┴─────────────────────────────────────────────┴────────────┴──────────────────────┴──────────────────────────────────────┤');
+        
+        // Summary statistics
+        const distribution = {};
+        topNotifications.forEach(n => {
+            distribution[n.Type] = (distribution[n.Type] || 0) + 1;
+        });
+        
+        console.log('│ SUMMARY'.padEnd(138) + '│');
+        console.log(`│ Total Notifications: ${topNotifications.length}`.padEnd(138) + '│');
+        
+        let summaryLine = '│ Distribution: ';
+        Object.entries(distribution).forEach(([type, count]) => {
+            summaryLine += `${type}: ${count}  `;
+        });
+        console.log(summaryLine.padEnd(138) + '│');
+        
+        console.log('╘' + '═'.repeat(138) + '╛\n');
+        
+        logger.info('Priority inbox displayed successfully', {
+            context: 'DISPLAY',
+            notificationCount: topNotifications.length,
+            distribution
+        });
+        
+        logger.logFunctionExit('displayTopNotifications');
+    }
+    
+    /**
+     * Main execution function
+     */
+    async run() {
+        logger.info('Starting Priority Inbox Manager', {
+            context: 'STARTUP',
+            apiUrl: this.API_URL,
+            mode: 'DEMO'
+        });
+        
+        try {
+            // Step 1: Get sample notifications (in production: fetch from API)
+            const notifications = this.getSampleNotifications();
+            
+            if (notifications.length === 0) {
+                logger.warn('No notifications received', {
+                    context: 'NO_DATA'
+                });
+                console.log('No notifications available.');
+                return;
+            }
+            
+            logger.info('Notifications loaded', {
+                context: 'DATA_LOAD',
+                notificationCount: notifications.length
+            });
+            
+            // Step 2: Enrich with priority scores
+            const enrichedNotifications = this.enrichNotificationsWithPriority(notifications);
+            
+            // Step 3: Get top 10
+            const topNotifications = this.getTopNotifications(enrichedNotifications, 10);
+            
+            // Step 4: Display
+            this.displayTopNotifications(topNotifications);
+            
+            logger.info('Priority Inbox Manager completed successfully', {
+                context: 'COMPLETION',
+                totalProcessed: notifications.length,
+                topReturned: topNotifications.length,
+                mode: 'DEMO'
+            });
+            
+        } catch (error) {
+            logger.fatal('Priority Inbox Manager failed', {
+                context: 'FATAL_ERROR',
+                error: error.message,
+                stack: error.stack
+            });
+            
+            console.error('\n❌ Error:', error.message);
+            process.exit(1);
+        }
+    }
+}
+
+// Execute if run directly
+if (require.main === module) {
+    const manager = new PriorityInboxManager();
+    manager.run();
+}
+
+module.exports = PriorityInboxManager;

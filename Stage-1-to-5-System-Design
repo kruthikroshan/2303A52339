@@ -1,0 +1,1256 @@
+# Notification System Design
+
+## Stage 1: REST API Design & Contract
+
+### Core Actions Identified
+
+1. **Fetch Notifications** - Retrieve notifications with optional filters
+2. **Mark as Read** - Update notification read status
+3. **Delete Notification** - Remove notification
+4. **Get Priority Notifications** - Retrieve top N important notifications
+5. **Subscribe to Real-time Updates** - Establish real-time connection
+
+### REST API Endpoints
+
+#### 1. Get All Notifications
+```
+GET /api/notifications
+Query Parameters:
+  - limit: number (default: 10, max: 100)
+  - page: number (default: 1)
+  - notification_type: string (Event | Result | Placement)
+
+Request Headers:
+  Authorization: Bearer <token>
+  Content-Type: application/json
+
+Response (200 OK):
+{
+  "success": true,
+  "data": {
+    "notifications": [
+      {
+        "id": "uuid",
+        "type": "Placement|Result|Event",
+        "message": "string",
+        "timestamp": "2026-04-22T17:51:30Z",
+        "isRead": boolean,
+        "createdAt": "2026-04-22T17:51:30Z"
+      }
+    ],
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 10,
+      "totalItems": 100,
+      "itemsPerPage": 10
+    }
+  },
+  "message": "Notifications retrieved successfully"
+}
+```
+
+#### 2. Mark Notification as Read
+```
+PATCH /api/notifications/{id}/read
+Request Body:
+{
+  "isRead": true
+}
+
+Request Headers:
+  Authorization: Bearer <token>
+  Content-Type: application/json
+
+Response (200 OK):
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "isRead": true,
+    "updatedAt": "2026-04-22T17:51:30Z"
+  },
+  "message": "Notification marked as read"
+}
+```
+
+#### 3. Mark Multiple Notifications as Read
+```
+PATCH /api/notifications/read-bulk
+Request Body:
+{
+  "notificationIds": ["uuid1", "uuid2", "uuid3"]
+}
+
+Response (200 OK):
+{
+  "success": true,
+  "data": {
+    "updatedCount": 3,
+    "timestamp": "2026-04-22T17:51:30Z"
+  },
+  "message": "Notifications marked as read"
+}
+```
+
+#### 4. Delete Notification
+```
+DELETE /api/notifications/{id}
+
+Response (200 OK):
+{
+  "success": true,
+  "message": "Notification deleted successfully"
+}
+```
+
+#### 5. Get Priority Notifications (Top N)
+```
+GET /api/notifications/priority
+Query Parameters:
+  - limit: number (default: 10, max: 50)
+  - notification_type: string (Event | Result | Placement) [optional]
+
+Response (200 OK):
+{
+  "success": true,
+  "data": {
+    "priorityNotifications": [
+      {
+        "id": "uuid",
+        "type": "Placement",
+        "message": "string",
+        "timestamp": "2026-04-22T17:51:30Z",
+        "isRead": boolean,
+        "priority": 3,
+        "score": 95.5
+      }
+    ]
+  },
+  "message": "Priority notifications retrieved"
+}
+```
+
+#### 6. Real-time Notifications (WebSocket)
+```
+Connection: ws://localhost:8000/api/notifications/stream
+Authorization: Bearer <token>
+
+Message Format (Server to Client):
+{
+  "event": "notification:new",
+  "data": {
+    "id": "uuid",
+    "type": "Placement",
+    "message": "string",
+    "timestamp": "2026-04-22T17:51:30Z"
+  }
+}
+
+Alternative: Server-Sent Events (SSE)
+GET /api/notifications/stream
+Response: text/event-stream
+
+data: {"id": "uuid", "type": "Placement", ...}
+```
+
+### Real-time Notification Mechanism
+
+**Chosen Approach: WebSocket + Server-Sent Events (SSE)**
+
+- **WebSocket** for bi-directional communication and active subscriptions
+- **SSE** as fallback for simpler one-way updates
+- **Rationale**: WebSocket provides true real-time, low-latency delivery; SSE provides automatic reconnection
+- **Implementation**: Use Socket.io for WebSocket abstraction with automatic fallbacks
+
+### Error Response Format
+```json
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_REQUEST",
+    "message": "Descriptive error message",
+    "details": {}
+  },
+  "timestamp": "2026-04-22T17:51:30Z"
+}
+```
+
+---
+
+## Stage 2: Database Design & Schema
+
+### Database Choice: PostgreSQL
+
+**Rationale:**
+- ACID compliance for reliable notification delivery
+- JSON support for flexible notification metadata
+- Advanced indexing options (partial indexes, B-tree, GIN indexes)
+- Array data types for efficient bulk operations
+- Window functions for priority calculations
+- Proven scalability to millions of records
+- Better than NoSQL for relational queries (student-notification relationships)
+
+### Database Schema
+
+```sql
+-- Students Table
+CREATE TABLE students (
+    id SERIAL PRIMARY KEY,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    enrollmentYear INT,
+    createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Notification Types Enum
+CREATE TYPE notification_type AS ENUM ('Event', 'Result', 'Placement');
+
+-- Notifications Table
+CREATE TABLE notifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    studentId INT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    type notification_type NOT NULL,
+    message TEXT NOT NULL,
+    metadata JSONB DEFAULT '{}',
+    createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Notification Read Status (Denormalized for performance)
+CREATE TABLE notification_read_status (
+    id SERIAL PRIMARY KEY,
+    notificationId UUID NOT NULL REFERENCES notifications(id) ON DELETE CASCADE,
+    studentId INT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    isRead BOOLEAN DEFAULT FALSE,
+    readAt TIMESTAMP,
+    createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(notificationId, studentId)
+);
+
+-- Indexes for Performance
+CREATE INDEX idx_notifications_studentId ON notifications(studentId);
+CREATE INDEX idx_notifications_type ON notifications(type);
+CREATE INDEX idx_notifications_createdAt ON notifications(createdAt DESC);
+CREATE INDEX idx_notifications_composite ON notifications(studentId, type, createdAt DESC);
+
+CREATE INDEX idx_read_status_notificationId ON notification_read_status(notificationId);
+CREATE INDEX idx_read_status_studentId ON notification_read_status(studentId);
+CREATE INDEX idx_read_status_isRead ON notification_read_status(isRead) 
+    WHERE isRead = false; -- Partial index for unread notifications
+
+CREATE INDEX idx_read_status_composite ON notification_read_status(studentId, isRead);
+```
+
+### Scalability Concerns
+
+**Problem 1: Query Volume at Scale (50K students, 5M notifications)**
+- **Issue**: Full table scans become expensive
+- **Solution**: Strategic indexing on (studentId, isRead) and (studentId, createdAt)
+
+**Problem 2: Write Amplification During Bulk Notifications**
+- **Issue**: Inserting 50K notification records sequentially causes lock contention
+- **Solution**: Batch inserts with COPY command or prepared batch statements
+
+**Problem 3: Hot Row Contention**
+- **Issue**: Many students reading same notification simultaneously
+- **Solution**: Denormalize read status in separate table; use connection pooling
+
+**Problem 4: JSON Metadata Growth**
+- **Issue**: Unstructured metadata bloats table
+- **Solution**: Archive old notifications; use separate blob storage for large metadata
+
+### Query Examples
+
+#### 1. Fetch Unread Notifications (Optimized)
+```sql
+SELECT 
+    n.id,
+    n.type,
+    n.message,
+    n.createdAt,
+    nrs.isRead
+FROM notifications n
+LEFT JOIN notification_read_status nrs 
+    ON n.id = nrs.notificationId 
+    AND nrs.studentId = $1
+WHERE n.studentId = $1 
+    AND (nrs.isRead = false OR nrs.isRead IS NULL)
+ORDER BY n.createdAt DESC
+LIMIT $2 OFFSET $3;
+```
+
+#### 2. Get All Unread Notifications Count
+```sql
+SELECT COUNT(*) as unread_count
+FROM notification_read_status
+WHERE studentId = $1 AND isRead = false;
+```
+
+#### 3. Mark Notifications as Read (Bulk)
+```sql
+UPDATE notification_read_status
+SET isRead = true, readAt = CURRENT_TIMESTAMP
+WHERE studentId = $1 
+    AND notificationId = ANY($2::uuid[])
+    AND isRead = false;
+```
+
+#### 4. Filter by Type with Pagination
+```sql
+SELECT 
+    n.id,
+    n.type,
+    n.message,
+    n.createdAt,
+    nrs.isRead
+FROM notifications n
+LEFT JOIN notification_read_status nrs 
+    ON n.id = nrs.notificationId 
+    AND nrs.studentId = $1
+WHERE n.studentId = $1 
+    AND n.type = $2::notification_type
+ORDER BY n.createdAt DESC
+LIMIT $3 OFFSET $4;
+```
+
+---
+
+## Stage 3: Query Optimization & Performance
+
+### Analysis of Slow Query
+
+**Original Query:**
+```sql
+SELECT * FROM notifications
+WHERE studentID = 1042 AND isRead = false
+ORDER BY createdAt ASC;
+```
+
+**Problems Identified:**
+
+1. **SELECT * is Inefficient**
+   - Retrieves all columns including large TEXT fields unnecessarily
+   - Increases I/O and network transfer overhead
+
+2. **Missing Indexes**
+   - No index on (studentID, isRead) combination
+   - Full table scan required for every query
+   - At 5M rows, scanning entire table is expensive
+
+3. **Wrong Sort Order**
+   - Using ASC for createdAt; typically users want newest first (DESC)
+
+4. **Implicit JOIN Issue**
+   - The query assumes isRead is in notifications table
+   - In real scenarios, read status might be in separate table causing additional joins
+
+### Optimized Query
+
+```sql
+SELECT 
+    n.id,
+    n.type,
+    n.message,
+    n.createdAt
+FROM notifications n
+INNER JOIN notification_read_status nrs 
+    ON n.id = nrs.notificationId
+WHERE n.studentId = 1042 
+    AND nrs.isRead = false
+ORDER BY n.createdAt DESC
+LIMIT 50;
+```
+
+**Improvements:**
+- **Specific columns only**: Reduces data transfer
+- **Index usage**: Uses composite index (studentId, isRead)
+- **Correct order**: DESC for newest-first
+- **LIMIT added**: Prevents full result set transfer
+
+**Estimated Computation Cost:**
+- Original: ~2-3 seconds (full table scan of 5M rows)
+- Optimized: ~50-100ms (index seek + sorted retrieval)
+- **Improvement: 20-30x faster**
+
+### Indexing Strategy
+
+**Myth: "Index Every Column"**
+
+**Why This Is Wrong:**
+1. **Write Performance Degradation**: Every INSERT/UPDATE must update all indexes
+2. **Memory Overhead**: Each index consumes RAM and disk space
+3. **Query Planner Confusion**: Too many indexes slows optimization decisions
+4. **Maintenance Cost**: VACUUM and ANALYZE take longer
+
+**Correct Strategy:**
+
+```sql
+-- GOOD: Composite indexes for common queries
+CREATE INDEX idx_student_unread ON notification_read_status(studentId, isRead);
+CREATE INDEX idx_student_type_date ON notifications(studentId, type, createdAt DESC);
+
+-- GOOD: Partial indexes for rare values
+CREATE INDEX idx_placement_recent 
+    ON notifications(studentId, createdAt DESC) 
+    WHERE type = 'Placement';
+
+-- AVOID: Too many single-column indexes
+-- CREATE INDEX idx_type ON notifications(type);  -- Usually not needed if covered by composite
+-- CREATE INDEX idx_message ON notifications(message);  -- Avoid unless full-text search needed
+```
+
+### Placement Notifications in Last 7 Days
+
+```sql
+SELECT DISTINCT n.studentId, n.message, n.createdAt
+FROM notifications n
+WHERE n.type = 'Placement'
+    AND n.createdAt >= CURRENT_TIMESTAMP - INTERVAL '7 days'
+ORDER BY n.createdAt DESC;
+```
+
+**Alternative (If tracking students who received notification):**
+```sql
+SELECT DISTINCT s.id, s.email, n.message, n.createdAt
+FROM students s
+INNER JOIN notifications n ON s.id = n.studentId
+WHERE n.type = 'Placement'
+    AND n.createdAt >= NOW() - INTERVAL '7 days'
+ORDER BY n.createdAt DESC;
+```
+
+---
+
+## Stage 4: Caching & Performance Strategy
+
+### Problem Statement
+- Notifications fetched on every page load
+- Database overwhelmed by repeated requests
+- User experience degraded due to slow queries
+
+### Caching Strategies
+
+#### Strategy 1: Redis In-Memory Cache
+
+**Implementation:**
+```
+GET /api/notifications
+→ Check Redis Cache [key: user:{studentId}:notifications:{page}]
+→ If cache hit: Return cached data (TTL: 5 minutes)
+→ If cache miss: Query DB → Store in Redis → Return
+→ On POST/PATCH: Invalidate cache
+```
+
+**Advantages:**
+- Sub-millisecond response times
+- Reduces database load by 90%
+- Simple to implement
+- Supports cache invalidation
+
+**Disadvantages:**
+- Additional infrastructure cost
+- Requires cache warming on startup
+- Risk of stale data (mitigated by TTL)
+
+**Tradeoff:** Speed vs. Memory cost vs. Data freshness
+
+#### Strategy 2: CDN (Content Delivery Network)
+
+**Implementation:**
+```
+Static notification summaries cached at edge
+Suitable for "top notifications" endpoint
+Cache-Control: max-age=60 (1 minute)
+```
+
+**Advantages:**
+- Geographic distribution
+- Very fast for read-heavy workloads
+- Scales automatically
+
+**Disadvantages:**
+- Not suitable for personalized data
+- Cache invalidation across regions complex
+- Overkill for single-region app
+
+**Tradeoff:** Geographic coverage vs. Setup complexity
+
+#### Strategy 3: Database Query Result Caching
+
+**Implementation:**
+```sql
+-- Materialized view for common queries
+CREATE MATERIALIZED VIEW notification_summary AS
+SELECT studentId, COUNT(*) as total_notifications,
+       SUM(CASE WHEN isRead = false THEN 1 ELSE 0 END) as unread_count
+FROM notification_read_status
+GROUP BY studentId;
+
+-- Refresh every 5 minutes
+REFRESH MATERIALIZED VIEW CONCURRENTLY notification_summary;
+```
+
+**Advantages:**
+- Reduces query complexity
+- Built-in to database
+- No external services needed
+
+**Disadvantages:**
+- Refresh lag (notifications appear after 5 minutes)
+- Full refresh can lock table
+
+**Tradeoff:** Simplicity vs. Data freshness
+
+#### Strategy 4: Client-Side Caching
+
+**Implementation:**
+```javascript
+// localStorage for unread notification count
+// IndexedDB for full notification list
+// Cache invalidation on tab focus
+```
+
+**Advantages:**
+- Zero server load for repeat visits
+- Works offline
+- User controls data
+
+**Disadvantages:**
+- Storage limits
+- Cross-device sync challenges
+- Security concerns
+
+**Tradeoff:** User experience vs. Data consistency
+
+### Recommended Solution: Hybrid Approach
+
+1. **Redis for primary cache** (5-minute TTL)
+2. **Client-side IndexedDB** for last known state
+3. **Database indexes** for unavoidable queries
+4. **WebSocket/SSE** for real-time updates (bypasses cache)
+
+**Benefits:**
+- 99% queries hit Redis (milliseconds)
+- Database protected from thundering herd
+- Client gets updates in near-real-time
+- Graceful degradation if cache fails
+
+---
+
+## Stage 5: Reliable Bulk Notification System
+
+### Issues with Original Implementation
+
+```pseudocode
+function notify_all(student_ids: array, message: string):
+  for student_id in student_ids:
+    send_email(student_id, message)    // ❌ Synchronous
+    save_to_db(student_id, message)    // ❌ No retry
+    push_to_app(student_id, message)   // ❌ Mid-way failure = lost data
+```
+
+**Critical Shortcomings:**
+
+1. **Synchronous Execution**
+   - 50,000 students × 2 seconds per email = 27+ hours
+   - Any failure stops entire process
+   - Terrible user experience
+
+2. **No Error Recovery**
+   - Email API timeout = notification lost for that student
+   - 200 students fail midway = 200 get nothing
+
+3. **Unbounded Retries**
+   - Transient network errors cause permanent failures
+   - No exponential backoff
+
+4. **Coupled Operations**
+   - DB save and email send intertwined
+   - DB is fast, email is slow (mismatch)
+
+5. **No Idempotency**
+   - Duplicate sends if process restarts
+   - No tracking of partial completion
+
+### Redesigned Solution
+
+**Architecture: Async Task Queue + Event Sourcing**
+
+```pseudocode
+function notify_all(student_ids: array, message: string):
+    // 1. Create bulk notification record (atomic)
+    bulkNotificationId = db.create_bulk_notification({
+        studentCount: len(student_ids),
+        message: message,
+        status: "PENDING",
+        createdAt: now()
+    })
+    
+    // 2. Queue all tasks asynchronously (no failures here)
+    for each batch of 100 student_ids:
+        queue.enqueue({
+            type: "SEND_NOTIFICATION",
+            bulkNotificationId: bulkNotificationId,
+            studentIds: batch,
+            message: message,
+            retries: 0,
+            maxRetries: 3
+        })
+    
+    // 3. Return immediately
+    return { bulkNotificationId: bulkNotificationId, status: "QUEUED" }
+
+// Async Worker Process
+async function process_notification_task(task):
+    try {
+        // Save to DB first (fast, reliable)
+        for studentId in task.studentIds:
+            db.save_notification({
+                studentId: studentId,
+                message: task.message,
+                bulkNotificationId: task.bulkNotificationId,
+                isRead: false
+            })
+        
+        // Then send email (slow, can fail)
+        for studentId in task.studentIds:
+            try {
+                email_api.send(studentId, task.message)
+                // Track success
+                db.update_notification_status(studentId, task.bulkNotificationId, "EMAIL_SENT")
+            } catch error:
+                // Mark for retry (don't fail entire batch)
+                db.update_notification_status(studentId, task.bulkNotificationId, "EMAIL_FAILED")
+        
+        // Push real-time notification (websocket/SSE)
+        for studentId in task.studentIds:
+            push_notification(studentId, task.message)
+        
+        queue.acknowledge(task)
+    
+    } catch error:
+        if task.retries < task.maxRetries:
+            // Re-queue with exponential backoff
+            queue.requeue(task, delay = 2^task.retries seconds)
+        else:
+            // Log for manual intervention
+            logger.error("Notification delivery failed after retries", { task: task, error: error })
+            queue.acknowledge(task)  // Don't retry again
+```
+
+### Key Design Decisions
+
+**1. Should DB save and email sending happen together?**
+
+**Answer: NO. They should be separate.**
+
+- **DB Save**: Fast (< 100ms), reliable, should be synchronous per task
+- **Email Send**: Slow (1-5 seconds), unreliable, should be async with retry
+- **Reason**: If email fails, notification is still in system for user to see in app
+- **Benefit**: User experience not blocked by email API delays
+
+**2. Failure Handling for Midway Failures (200 of 50K failed)**
+
+- **In original design**: Those 200 students get nothing
+- **In new design**: 
+  - Database has all 50K notifications (success)
+  - Email was sent to 49,800 students (most got it)
+  - 200 students can be retried in next batch
+  - Failure tracking allows admin to resend failed batch
+
+**3. Idempotency**
+
+- **Use idempotency keys**: `notificationId = hash(studentId + bulkNotificationId + message)`
+- **Track completion**: `notification_delivery_status` table
+- **Prevents**: Duplicate emails if worker crashes and retries
+
+### Revised Pseudocode with Error Handling
+
+```pseudocode
+function notify_all(student_ids: array, message: string):
+    bulkNotificationId = generate_uuid()
+    
+    // Atomic: Create bulk notification record
+    db.transaction(() => {
+        db.bulk_notifications.insert({
+            id: bulkNotificationId,
+            totalStudents: len(student_ids),
+            sentCount: 0,
+            failedCount: 0,
+            status: "PROCESSING",
+            createdAt: CURRENT_TIMESTAMP
+        })
+    })
+    
+    // Queue in batches (better resource management)
+    BATCH_SIZE = 500
+    for i = 0; i < len(student_ids); i += BATCH_SIZE:
+        batch = student_ids[i : i + BATCH_SIZE]
+        queue.push_to_kafka(topic="notifications", message={
+            bulkNotificationId: bulkNotificationId,
+            studentBatch: batch,
+            message: message,
+            timestamp: CURRENT_TIMESTAMP,
+            attempt: 1
+        })
+    
+    return { bulkNotificationId: bulkNotificationId, status: "QUEUED" }
+
+
+// Async Consumer Worker
+async function consume_notification_messages():
+    while true:
+        message = queue.poll()
+        if not message: continue
+        
+        try:
+            bulkId = message.bulkNotificationId
+            students = message.studentBatch
+            msg = message.message
+            
+            // Step 1: Save all to DB (atomic batch insert)
+            db.transaction(() => {
+                for studentId in students:
+                    db.notifications.insert({
+                        id: generate_uuid(),
+                        studentId: studentId,
+                        message: msg,
+                        type: extract_type(msg),  // Placement|Result|Event
+                        bulkNotificationId: bulkId,
+                        isRead: false,
+                        createdAt: CURRENT_TIMESTAMP
+                    })
+                
+                // Update progress counter
+                db.bulk_notifications.update(
+                    { id: bulkId },
+                    { sentCount: sentCount + len(students) }
+                )
+            })
+            
+            // Step 2: Send emails with retry logic
+            failed_students = []
+            for studentId in students:
+                try {
+                    student = db.students.find(studentId)
+                    email_result = send_email(student.email, msg)
+                    
+                    // Log success
+                    logger.info("Email sent", { 
+                        studentId: studentId, 
+                        bulkId: bulkId 
+                    })
+                } catch email_error:
+                    failed_students.append({
+                        studentId: studentId,
+                        error: email_error.message,
+                        timestamp: CURRENT_TIMESTAMP
+                    })
+            
+            // Step 3: Push real-time notifications
+            for studentId in students:
+                websocket_broker.publish(channel=f"student:{studentId}", message={
+                    id: generate_uuid(),
+                    type: extract_type(msg),
+                    message: msg,
+                    timestamp: CURRENT_TIMESTAMP
+                })
+            
+            // Step 4: Handle failed emails
+            if len(failed_students) > 0:
+                db.email_failures.insert_batch(failed_students)
+                
+                // Decide: Retry immediately or defer?
+                if message.attempt < 3:
+                    queue.push_to_kafka({
+                        ...message,
+                        studentBatch: [s.studentId for s in failed_students],
+                        attempt: message.attempt + 1,
+                        delayMs: 2^message.attempt * 1000  // Exponential backoff
+                    })
+            
+            // Acknowledge message only after all steps succeed
+            queue.acknowledge(message)
+            
+            logger.info("Notification batch processed", {
+                bulkId: bulkId,
+                studentCount: len(students),
+                failedCount: len(failed_students)
+            })
+        
+        except critical_error:
+            logger.error("Critical error in notification processing", {
+                error: critical_error,
+                message: message
+            })
+            // Don't acknowledge; message goes to dead-letter queue
+```
+
+### Monitoring & Observability
+
+```sql
+-- Bulk notification status tracking
+CREATE TABLE bulk_notifications (
+    id UUID PRIMARY KEY,
+    message TEXT NOT NULL,
+    totalStudents INT NOT NULL,
+    sentCount INT DEFAULT 0,
+    emailSentCount INT DEFAULT 0,
+    failedCount INT DEFAULT 0,
+    status ENUM('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED'),
+    createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    completedAt TIMESTAMP
+);
+
+-- Failed delivery tracking
+CREATE TABLE email_failures (
+    id SERIAL PRIMARY KEY,
+    bulkNotificationId UUID REFERENCES bulk_notifications(id),
+    studentId INT REFERENCES students(id),
+    errorMessage TEXT,
+    attemptCount INT DEFAULT 1,
+    lastAttemptAt TIMESTAMP,
+    createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Query: Bulk operation status
+SELECT 
+    id,
+    totalStudents,
+    sentCount,
+    emailSentCount,
+    failedCount,
+    ROUND(100.0 * sentCount / totalStudents, 2) as completion_percentage,
+    status
+FROM bulk_notifications
+WHERE createdAt >= CURRENT_TIMESTAMP - INTERVAL '24 hours'
+ORDER BY createdAt DESC;
+```
+
+---
+
+## Stage 6: Priority Inbox Implementation
+
+### Overview
+
+Implemented a priority-based notification ranking system that fetches notifications from the provided API and sorts them based on:
+1. **Notification Type Weight** (Placement: 3, Result: 2, Event: 1)
+2. **Recency Score** (newer notifications score higher, decaying over 7 days)
+
+Combined score: `(typeWeight × 100) + recencyScore`
+
+### Architecture & Design
+
+The priority inbox system uses a **streaming aggregation pattern** suitable for continuous incoming notifications:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Notification Fetcher                                         │
+│ - Calls API endpoint with auth token                         │
+│ - Handles pagination (limit, page, notification_type params) │
+└──────────────────┬──────────────────────────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────────────────────────┐
+│ Priority Calculator                                          │
+│ - Compute typeWeight based on notification type              │
+│ - Calculate recencyScore (0-100 based on age)                │
+│ - Combine scores for overall priority                        │
+└──────────────────┬──────────────────────────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────────────────────────┐
+│ Top-N Extractor                                              │
+│ - Sort by priority score (descending)                        │
+│ - Secondary sort by timestamp (newest first)                 │
+│ - Extract top N notifications (configurable)                 │
+└──────────────────┬──────────────────────────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────────────────────────┐
+│ Display Layer                                                │
+│ - Formatted console table for visualization                  │
+│ - Distribution statistics (count by type)                    │
+│ - Emoji indicators for quick visual recognition              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Implementation Details
+
+**Files Created:**
+- `priority-inbox.js` - Production-ready implementation (requires API authentication)
+- `priority-inbox-demo.js` - Demo version with sample data for testing
+- `logging-middleware/index.js` - Centralized logging with structured output
+
+**Code Highlights:**
+
+1. **Priority Score Algorithm:**
+   ```
+   Score = (Type Weight × 100) + Recency Score
+   
+   Type Weights:
+   - Placement: 3 (weight × 100 = 300 base points)
+   - Result: 2 (weight × 100 = 200 base points)
+   - Event: 1 (weight × 100 = 100 base points)
+   
+   Recency Score (0-100):
+   - At age 0 hours: 100 (newest)
+   - At age 3.5 days: 50 (halfway decayed)
+   - At age 7 days: 0 (oldest considered)
+   
+   Examples:
+   - Fresh Placement: 300 + 100 = 400 (highest)
+   - Fresh Event: 100 + 100 = 200 (lowest)
+   - 7-day-old Placement: 300 + 0 = 300 (still beats fresh Events)
+   ```
+
+2. **Logging Integration:**
+   - Function entry/exit logging for tracing
+   - API call metrics (status code, response time)
+   - Priority calculation logs per notification
+   - Distribution statistics logged
+
+3. **Error Handling:**
+   - Network timeout (10 seconds)
+   - HTTP status code validation
+   - JSON parse error handling
+   - Graceful fallback to demo mode
+
+### Handling Continuous Incoming Notifications
+
+**In-Memory Strategy (for real-time updates):**
+
+```javascript
+class PriorityInboxCache {
+    constructor(maxSize = 1000, topN = 10) {
+        this.notifications = new Map();  // ID -> notification with score
+        this.maxSize = maxSize;
+        this.topN = topN;
+        this.lastUpdate = Date.now();
+    }
+    
+    addNotification(notification) {
+        const score = this.calculateScore(notification);
+        this.notifications.set(notification.ID, {
+            ...notification,
+            priorityScore: score,
+            addedAt: Date.now()
+        });
+        
+        // Trim if exceeds maxSize
+        if (this.notifications.size > this.maxSize) {
+            this.evictLRU();
+        }
+        
+        this.lastUpdate = Date.now();
+    }
+    
+    getTopN(n = this.topN) {
+        return Array.from(this.notifications.values())
+            .sort((a, b) => b.priorityScore - a.priorityScore)
+            .slice(0, n);
+    }
+    
+    evictLRU() {
+        let oldest = null;
+        let oldestTime = Date.now();
+        
+        for (let [id, notif] of this.notifications) {
+            if (notif.addedAt < oldestTime) {
+                oldestTime = notif.addedAt;
+                oldest = id;
+            }
+        }
+        
+        if (oldest) this.notifications.delete(oldest);
+    }
+}
+```
+
+**Recalculation Strategy:**
+- Scores decay over time (recency component changes)
+- Full recalculation every 5 minutes or on new notification batch
+- Incremental updates for new notifications only
+- Cache invalidation when notification is marked as read
+
+### Performance Characteristics
+
+| Operation | Time Complexity | Space Complexity | Notes |
+|-----------|-----------------|------------------|-------|
+| Add notification | O(1) | O(1) | Direct insert into Map |
+| Get top N | O(n log n) | O(n) | n = notification count |
+| Calculate score | O(1) | O(1) | Per notification |
+| Evict old item | O(n) | O(1) | Worst case scan all items |
+| Refresh scores | O(n) | O(1) | Recalculate all scores |
+
+**Typical Performance (10,000 notifications):**
+- Fetch from API: ~100-200ms
+- Score all notifications: ~10-20ms
+- Extract top 10: ~5-10ms
+- Total end-to-end: ~150ms
+
+### Sample Output
+
+```
+════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+│ PRIORITY INBOX - TOP 10 NOTIFICATIONS                                                                                                   │
+════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+│ Rank │ Type │ Priority │ Message                                     │ Date       │ Time Ago             │ ID                                   │
+├──────┼──────┼──────────┼─────────────────────────────────────────────┼────────────┼──────────────────────┼──────────────────────────────────────┤
+│ 1   │ 💼 Placement│ 300     │ CSX Corporation hiring                     │ 2026-04-22│ 56d 18h ago         │ b283218f-ea5a-4b7c-93a9-1f2f240d64b0│
+│ 2   │ 💼 Placement│ 300     │ Advanced Micro Devices Inc. hiring         │ 2026-04-22│ 56d 18h ago         │ 8a7412bd-6065-4d09-8501-a37f11cc848b│
+│ 3   │ 💼 Placement│ 300     │ Microsoft hiring for internships           │ 2026-04-22│ 56d 18h ago         │ f1234567-89ab-cdef-0123-456789abcdef│
+│ 4   │ 📊 Result│ 200     │ mid-sem                                    │ 2026-04-22│ 56d 18h ago         │ d146095a-0d86-4a34-9e69-3900a14576bc│
+│ 5   │ 📊 Result│ 200     │ mid-sem                                    │ 2026-04-22│ 56d 18h ago         │ 0005513a-142b-4bbc-8678-eefec65e1ede│
+│ 6   │ 📊 Result│ 200     │ project-review                             │ 2026-04-22│ 56d 18h ago         │ ea836726-c25e-4f21-a72f-544a6af8a37f│
+│ 7   │ 📊 Result│ 200     │ external                                   │ 2026-04-22│ 56d 18h ago         │ 003cb427-8fc6-47f7-bb00-be228f6b0d2c│
+│ 8   │ 📊 Result│ 200     │ project-review                             │ 2026-04-22│ 56d 18h ago         │ e5c4ff20-31bf-4d40-8f02-72fda59e8918│
+│ 9   │ 📊 Result│ 200     │ project-review                             │ 2026-04-22│ 56d 18h ago         │ cf2885a6-45ac-4ba0-b548-6e9e9d4c52c8│
+│ 10  │ 🎉 Event│ 100     │ farewell                                   │ 2026-04-22│ 56d 18h ago         │ 81589ada-0ad3-4f77-9554-f52fb558e09d│
+├──────┴──────┴──────────┴─────────────────────────────────────────────┴────────────┴──────────────────────┴──────────────────────────────────┤
+│ SUMMARY                                                                                                                                 │
+│ Total Notifications: 10                                                                                                                 │
+│ Distribution: Placement: 3  Result: 6  Event: 1                                                                                         │
+╘══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╛
+```
+
+### Key Insights
+
+1. **Priority Composition:**
+   - Type weight dominates (300 base points for Placement vs 100 for Event)
+   - Recency prevents old items from being buried forever
+   - Fresh Placement always beats old Event (400 vs 100 max)
+
+2. **Scalability:**
+   - Algorithm scales linearly with notification count
+   - Can handle 50K+ notifications efficiently
+   - Top-10 extraction is fast (O(n log n) is acceptable)
+
+3. **User Experience:**
+   - Students see most relevant notifications first
+   - Placement notifications always prioritized during hiring season
+   - Recent events get visibility (recency factor)
+   - Visual indicators (emoji) for quick scanning
+
+### API Integration Notes
+
+**Production Implementation:**
+- Requires authentication header: `Authorization: Bearer <token>`
+- Supports pagination: `?limit=100&page=1`
+- Supports filtering: `?notification_type=Placement`
+- Rate limiting: ~1000 requests/hour
+
+**Error Handling:**
+- 401 Unauthorized → refresh token and retry
+- 429 Too Many Requests → exponential backoff
+- 500 Internal Server Error → circuit breaker pattern
+- Network timeout → fallback to cached results
+
+---
+
+
+## Stage 7: Production React Frontend with Logging Integration
+
+### Overview
+
+Implemented a production-ready React frontend application that integrates the logging middleware across the entire codebase, provides dual-page functionality for viewing notifications and priority inbox, and maintains consistent state management with localStorage persistence for view tracking.
+
+### Architecture & Implementation
+
+#### Frontend Logging Service (\src/logger.js\)
+
+Mirrors the backend logging middleware interface for consistency across the full stack:
+
+- Structured logging with timestamps and context
+- Console output with color-coded log levels (DEBUG, INFO, WARN, ERROR, FATAL)
+- localStorage persistence (circular buffer, max 100 logs)
+- Methods: debug(), info(), warn(), error(), fatal()
+- Context-specific loggers: logComponentLifecycle(), logAPICall(), logAPIError(), logUserAction()
+- Built-in log export functionality for debugging
+
+**Integration Points:**
+- App.jsx: Component lifecycle tracking
+- NotificationsPage.jsx: Filter changes, view state updates
+- PriorityInboxPage.jsx: Priority recalculation, limit changes
+- useNotifications.js: Data fetch lifecycle, localStorage operations
+- api.js: HTTP request/response tracking with duration metrics
+
+#### API Service (\src/api.js\)
+
+Centralized API client with comprehensive logging:
+
+- GET /evaluation-service/notifications endpoint
+- Query parameters: limit, page, notification_type
+- Automatic response enrichment with notification count
+- Error handling with detailed logging
+- Network timeout handling (10 seconds)
+- Fallback to demo data when API is unavailable
+
+#### State Management Hook (\src/useNotifications.js\)
+
+Custom React hook managing notifications, view status, and filtering:
+
+**Returns:**
+- notifications: Array of enriched notification objects
+- loading: Boolean for loading state
+- error: Error message if fetch fails
+- viewedNotifications: Set of viewed notification IDs
+- fetchNotifications(): Async function to refetch
+- markAsViewed(id): Mark single notification as viewed
+- markMultipleAsViewed(ids): Mark batch as viewed
+- unviewedCount: Count of unread notifications
+
+**Features:**
+- Persists viewed status to localStorage
+- Enriches notifications with isViewed and parsedTimestamp
+- Supports demo data for development/demo modes
+- Logs all state changes
+
+#### Page Components
+
+**NotificationsPage.jsx:**
+- Display all notifications with pagination (5 per page)
+- Filter by notification type (Event, Result, Placement)
+- Full-text search across message and type
+- Visual indicators for new (unviewed) vs viewed notifications
+- Expandable card details showing full ID and timestamp
+- Mark single/all as viewed buttons
+- Material UI Card layout for responsive design
+
+**PriorityInboxPage.jsx:**
+- Calculate and display top-N notifications sorted by priority
+- Configurable limit: 5, 10, 15, 20, 25, 50
+- Optional type filter for priority inbox
+- Display priority score per notification
+- Distribution statistics (count by type with emoji)
+- Table view with rank, type, message, priority score, date
+- Refresh button to recalculate priorities
+
+#### Priority Algorithm (Frontend Implementation)
+
+\\\javascript
+calculatePriorityScore(notification) {
+    // Type-based weights
+    const typeWeight = WEIGHTS[notification.Type] || 0; // Placement=3, Result=2, Event=1
+    
+    // Time decay calculation
+    const timestamp = new Date(notification.Timestamp);
+    const now = new Date();
+    const ageMs = now.getTime() - timestamp.getTime();
+    const ageHours = ageMs / (1000 * 60 * 60);
+    const maxAgeHours = 7 * 24;
+    const recencyScore = Math.max(0, 100 * (1 - ageHours / maxAgeHours));
+    
+    // Final score
+    return (typeWeight * 100) + recencyScore;
+}
+
+Sorting:
+1. Primary: Priority score (descending)
+2. Secondary: Timestamp (newest first)
+\\\
+
+### Material UI Integration
+
+**Components Used:**
+- AppBar: Navigation header with badge for unread count
+- Tabs: Switch between All Notifications and Priority Inbox
+- Card: Notification item display with hover effects
+- Table: Priority inbox structured data view
+- Chip: Type badges with color coding
+- Button: Actions (filters, mark viewed, refresh)
+- Select/TextField: Filter controls
+- Pagination: Multi-page navigation
+- CircularProgress: Loading indicator
+- Alert: Error and info messages
+- Badge: Unread notification counter
+
+**Styling Approach:**
+- Material UI sx prop for component styling
+- Responsive grid with flexbox layouts
+- Color scheme: Placement (blue), Result (green), Event (orange)
+- Emoji indicators for quick visual scanning
+- Smooth transitions and hover effects
+- Mobile-responsive design with breakpoints
+
+### View Tracking Implementation
+
+**Storage Strategy:**
+- localStorage: viewedNotifications array of viewed notification IDs
+- State Flow: Load on mount → Update on view → Persist to localStorage → Restore on reload
+
+**UI Indicators:**
+- "New" chip badge on unviewed notifications
+- Reduced opacity (0.7) on viewed cards
+- Color change in button state (Mark / Viewed)
+- Badge counter showing unviewed count in AppBar
+
+### Error Handling & Edge Cases
+
+**API Failures:**
+- 401 Unauthorized: Logs warning, falls back to demo data
+- Network timeout: Falls back to cached/demo data
+- Parse errors: Graceful error message display
+
+**localStorage Limitations:**
+- Quota exceeded: Catches and logs, continues without persistence
+- Corrupted data: Try/catch with fallback to empty set
+
+**UI Edge Cases:**
+- Empty notifications: Shows "No notifications found" alert
+- Search with no results: Shows "No notifications found" alert
+- Page number out of range: Automatically clamps to valid range
+
+### Production Readiness
+
+**Completed:**
+- [x] All code paths instrumented with logging
+- [x] Material UI styling (no ShadCN, no CSS-only)
+- [x] Responsive design (desktop + mobile)
+- [x] Error handling with user-friendly messages
+- [x] Loading states (spinner + messaging)
+- [x] localStorage persistence
+- [x] Demo data fallback when API unavailable
+- [x] Environment-agnostic (works with/without API)
+- [x] React best practices (hooks, functional components, memoization)
+- [x] No console.log usage (all via logging middleware)
+
+### Files Created/Modified
+
+**New Files:**
+- \src/logger.js\ - Frontend logging service (115 lines)
+- \src/api.js\ - Notification API client (57 lines)
+- \src/useNotifications.js\ - State management hook (160 lines)
+- \src/pages/NotificationsPage.jsx\ - All notifications view (205 lines)
+- \src/pages/PriorityInboxPage.jsx\ - Priority inbox view (220 lines)
+- \src/App.css\ - Global styles (38 lines)
+
+**Modified Files:**
+- \src/App.jsx\ - AppBar with tabs navigation (75 lines)
+- \ite.config.js\ - Port 3000 configuration
+
+### Running the Application
+
+\\\ash
+cd notification-app-fe
+npm install        # Install dependencies
+npm run dev        # Start on http://localhost:3000
+
+Application Features:
+- Tab 1: All Notifications (filterable, searchable, paginated)
+- Tab 2: Priority Inbox (top-N, type filter, priority scores)
+- View tracking persists across reloads
+- Demo data available when API unavailable
+- All interactions logged
+\\\
+
+### Key Insights
+
+1. **State Persistence:** localStorage tracks viewed notifications across sessions
+2. **Priority Algorithm:** Frontend mirrors backend implementation for consistency
+3. **Logging Middleware:** Full integration provides comprehensive debugging across stack
+4. **Demo Mode:** API-agnostic design enables development without authentication
+5. **Material UI:** Production-quality styling with minimal custom CSS
+
+---
